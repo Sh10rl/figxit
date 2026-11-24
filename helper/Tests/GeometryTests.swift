@@ -92,8 +92,14 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(placement.yBelow, 151.84375, accuracy: 0.001)
     }
 
-    func testFocusedElementOnAnotherRowIsIgnored() throws {
-        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 171.84375, width: 2, height: 20)))
+    func testTernCaretWinsWhenALensMakesTheOutputTallerThanThePtyRows() throws {
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 231.84375, width: 2, height: 20)))
+        XCTAssertEqual(placement.x, 37.234375, accuracy: 0.001)
+        XCTAssertEqual(placement.yTop, 231.84375, accuracy: 0.001)
+    }
+
+    func testFocusedElementOutsideTheSurfaceIsIgnored() throws {
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: -9999, y: 131.84375, width: 0, height: 20)))
         XCTAssertEqual(placement.x, 9.234375 + 18, accuracy: 0.001)
         XCTAssertEqual(placement.yTop, 81.84375 + 40, accuracy: 0.001)
     }

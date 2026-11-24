@@ -157,17 +157,13 @@ enum Geometry {
                    cursor: surface?.cursor, caret: caret)
     }
 
-    /// How far a caret-shaped focused element sits from where the grid puts the cursor.
-    /// Corrects a surface frame that includes the terminal's own padding. Only shifts by less than
-    /// one row, so a stale or unrelated focused element never moves the popup to another line.
-    static func cursorOffset(_ cursor: CGRect, x: CGFloat, yTop: CGFloat, cellW: CGFloat, cellH: CGFloat) -> CGVector? {
-        guard cursor.width <= cellW * 1.5,
-              cursor.height >= cellH * 0.6, cursor.height <= cellH * 1.5
-        else { return nil }
-        let dy = cursor.minY - yTop
-        guard abs(dy) < cellH else { return nil }
-        let dx = cursor.minX - x
-        return CGVector(dx: abs(dx) < 2 * cellW ? dx : 0, dy: dy)
+    /// Whether the focused element is the terminal's caret: about one cell tall, at most a cell wide,
+    /// and inside the surface. Terminals such as Tern draw command output (Lenses) taller or shorter
+    /// than the pty rows, so the reported cursor row can be several rows off; the caret is not.
+    static func isCaret(_ cursor: CGRect, in base: CGRect, cellW: CGFloat, cellH: CGFloat) -> Bool {
+        cursor.width <= cellW * 1.5
+            && cursor.height >= cellH * 0.6 && cursor.height <= cellH * 1.5
+            && base.contains(CGPoint(x: cursor.midX, y: cursor.midY))
     }
 
     static func fit(grid: Grid, base: CGRect, focused: Bool, scale: CGFloat, physical: Bool,
@@ -232,10 +228,9 @@ enum Geometry {
 
         var x = base.minX + padX + (span(cellW) - cols + CGFloat(grid.col)) * cellW
         var yTop = top + padY + CGFloat(grid.row) * cellH
-        if source == "ax", let cursor = cursor,
-           let offset = cursorOffset(cursor, x: x + CGFloat(caret) * cellW, yTop: yTop, cellW: cellW, cellH: cellH) {
-            x += offset.dx
-            yTop += offset.dy
+        if source == "ax", let cursor = cursor, isCaret(cursor, in: base, cellW: cellW, cellH: cellH) {
+            x = max(base.minX, cursor.minX - CGFloat(caret) * cellW)
+            yTop = cursor.minY
         }
         return (Placement(
             source: source,
