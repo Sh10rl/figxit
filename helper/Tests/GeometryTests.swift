@@ -79,34 +79,50 @@ final class GeometryTests: XCTestCase {
     }
 
     private let ternBlock = CGRect(x: 9.234375, y: 81.84375, width: 850.390625, height: 1030.15625)
+    private let ternTerminal = CGRect(x: 19.234375, y: 91.84375, width: 840.390625, height: 1020.15625)
+    private let ternCaret = CGRect(x: 55.234375, y: 131.84375, width: 2, height: 20)
     private let ternGrid = #"{"cols":92,"rows":50,"col":2,"row":2,"cellPxW":18,"cellPxH":40,"pane":true}"#
 
     private func tern(cursor: CGRect?) -> Placement? {
-        Geometry.fit(grid: grid(ternGrid), base: ternBlock, focused: true, scale: 2, physical: false, cursor: cursor, caret: 2).placement
+        Geometry.fit(grid: grid(ternGrid), base: ternTerminal, focused: true, scale: 2, physical: false, cursor: cursor).placement
     }
 
-    func testTernCaretMovesThePopupPastTheBlockPadding() throws {
-        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 131.84375, width: 2, height: 20)))
+    func testTernTextAreaBesideTheCaretIsTheGrid() {
+        XCTAssertEqual(Geometry.textArea([ternTerminal], around: ternCaret, in: ternBlock), ternTerminal)
+    }
+
+    func testTextAreaThatMissesTheCaretIsSkipped() {
+        let other = CGRect(x: 400, y: 91.84375, width: 400, height: 500)
+        XCTAssertNil(Geometry.textArea([other], around: ternCaret, in: ternBlock))
+    }
+
+    func testTernPopupStartsAtTheReportedColumnPastTheBlockPadding() throws {
+        let placement = try XCTUnwrap(tern(cursor: ternCaret))
         XCTAssertEqual(placement.x, 37.234375, accuracy: 0.001)
         XCTAssertEqual(placement.yTop, 131.84375, accuracy: 0.001)
         XCTAssertEqual(placement.yBelow, 151.84375, accuracy: 0.001)
     }
 
-    func testTernCaretWinsWhenALensMakesTheOutputTallerThanThePtyRows() throws {
+    func testCaretThatTrailsTypingDoesNotMoveThePopupSideways() throws {
+        for x in [46.234375, 50.5, 55.234375] {
+            let placement = try XCTUnwrap(tern(cursor: CGRect(x: x, y: 131.84375, width: 2, height: 20)))
+            XCTAssertEqual(placement.x, 37.234375, accuracy: 0.001)
+        }
+    }
+
+    func testTernCaretRowWinsWhenALensMakesTheOutputTallerThanThePtyRows() throws {
         let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 231.84375, width: 2, height: 20)))
-        XCTAssertEqual(placement.x, 37.234375, accuracy: 0.001)
         XCTAssertEqual(placement.yTop, 231.84375, accuracy: 0.001)
     }
 
     func testFocusedElementOutsideTheSurfaceIsIgnored() throws {
-        let placement = try XCTUnwrap(tern(cursor: CGRect(x: -9999, y: 131.84375, width: 0, height: 20)))
-        XCTAssertEqual(placement.x, 9.234375 + 18, accuracy: 0.001)
-        XCTAssertEqual(placement.yTop, 81.84375 + 40, accuracy: 0.001)
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: -9999, y: 231.84375, width: 0, height: 20)))
+        XCTAssertEqual(placement.yTop, 91.84375 + 40, accuracy: 0.001)
     }
 
     func testFocusedElementThatIsNotCaretShapedIsIgnored() throws {
-        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 131.84375, width: 300, height: 120)))
-        XCTAssertEqual(placement.yTop, 81.84375 + 40, accuracy: 0.001)
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 231.84375, width: 300, height: 120)))
+        XCTAssertEqual(placement.yTop, 91.84375 + 40, accuracy: 0.001)
     }
 
     func testOnlyAScrollAreaParentClipsTheSurface() {

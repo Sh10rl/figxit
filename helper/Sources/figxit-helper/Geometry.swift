@@ -93,11 +93,24 @@ enum Geometry {
             let frame = axFrame(current)
             if let frame = frame,
                let surface = visibleSurface(frame, parentRole: element.map(axRole), parentFrame: element.flatMap(axFrame)) {
-                return (surface, cursor)
+                guard let cursor = cursor else { return (surface, nil) }
+                let children = (axAttribute(current, kAXChildrenAttribute) as? [AXUIElement]) ?? []
+                let areas = children.filter { axRole($0) == kAXTextAreaRole as String }.compactMap(axFrame)
+                return (textArea(areas, around: cursor, in: surface) ?? surface, cursor)
             }
             if depth == 0 { cursor = frame }
         }
         return nil
+    }
+
+    /// The text area beside the hidden caret input that holds the cursor. Its frame is the cell grid
+    /// without the padding of the surrounding block (Tern), so columns come out exact.
+    static func textArea(_ frames: [CGRect], around cursor: CGRect, in surface: CGRect) -> CGRect? {
+        let center = CGPoint(x: cursor.midX, y: cursor.midY)
+        return frames.first { frame in
+            let visible = frame.intersection(surface)
+            return visible.width > 100 && visible.height > 100 && visible.contains(center)
+        }.map { $0.intersection(surface) }
     }
 
     static func visibleSurface(_ frame: CGRect, parentRole: String?, parentFrame: @autoclosure () -> CGRect?) -> CGRect? {
@@ -144,22 +157,23 @@ enum Geometry {
         return abs(scaled - estimate) <= abs(raw - estimate) ? scaled : raw
     }
 
-    static func placement(grid: Grid, terminal: Terminal, caret: Int) -> Placement? {
-        locate(grid: grid, terminal: terminal, window: cgWindowFrame(pid: terminal.pid), caret: caret).placement
+    static func placement(grid: Grid, terminal: Terminal) -> Placement? {
+        locate(grid: grid, terminal: terminal, window: cgWindowFrame(pid: terminal.pid)).placement
     }
 
-    static func locate(grid: Grid, terminal: Terminal, window: CGRect?, caret: Int = 0) -> (placement: Placement?, split: Bool) {
+    static func locate(grid: Grid, terminal: Terminal, window: CGRect?) -> (placement: Placement?, split: Bool) {
         if grid.right == true, grid.cellPxW == nil || grid.cellPxH == nil { return (nil, false) }
         let surface = AXIsProcessTrusted() ? axSurface(pid: terminal.pid) : nil
         guard let base = surface?.frame ?? window else { return (nil, false) }
         let scale = screen(containing: base)?.backingScaleFactor ?? 2
         return fit(grid: grid, base: base, focused: surface != nil, scale: scale, physical: terminal.bundleId == physicalPixels,
-                   cursor: surface?.cursor, caret: caret)
+                   cursor: surface?.cursor)
     }
 
     /// Whether the focused element is the terminal's caret: about one cell tall, at most a cell wide,
     /// and inside the surface. Terminals such as Tern draw command output (Lenses) taller or shorter
-    /// than the pty rows, so the reported cursor row can be several rows off; the caret is not.
+    /// than the pty rows, so the reported cursor row can be several rows off; the caret's row is not.
+    /// Only its row is used: its x trails typing (redraw latency, cursor glide), the reported column does not.
     static func isCaret(_ cursor: CGRect, in base: CGRect, cellW: CGFloat, cellH: CGFloat) -> Bool {
         cursor.width <= cellW * 1.5
             && cursor.height >= cellH * 0.6 && cursor.height <= cellH * 1.5
@@ -167,7 +181,7 @@ enum Geometry {
     }
 
     static func fit(grid: Grid, base: CGRect, focused: Bool, scale: CGFloat, physical: Bool,
-                    cursor: CGRect? = nil, caret: Int = 0) -> (placement: Placement?, split: Bool) {
+                    cursor: CGRect? = nil) -> (placement: Placement?, split: Bool) {
         if grid.right == true, grid.cellPxW == nil || grid.cellPxH == nil { return (nil, false) }
         let padX = CGFloat(grid.padX ?? 0)
         let padY = CGFloat(grid.padY ?? 0)
@@ -226,10 +240,9 @@ enum Geometry {
             top = base.minY + max(0, base.height - rows * cellH - 2 * padY)
         }
 
-        var x = base.minX + padX + (span(cellW) - cols + CGFloat(grid.col)) * cellW
+        let x = base.minX + padX + (span(cellW) - cols + CGFloat(grid.col)) * cellW
         var yTop = top + padY + CGFloat(grid.row) * cellH
         if source == "ax", let cursor = cursor, isCaret(cursor, in: base, cellW: cellW, cellH: cellH) {
-            x = max(base.minX, cursor.minX - CGFloat(caret) * cellW)
             yTop = cursor.minY
         }
         return (Placement(
