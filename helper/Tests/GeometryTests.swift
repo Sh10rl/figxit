@@ -78,6 +78,31 @@ final class GeometryTests: XCTestCase {
         }
     }
 
+    private let ternBlock = CGRect(x: 9.234375, y: 81.84375, width: 850.390625, height: 1030.15625)
+    private let ternGrid = #"{"cols":92,"rows":50,"col":2,"row":2,"cellPxW":18,"cellPxH":40,"pane":true}"#
+
+    private func tern(cursor: CGRect?) -> Placement? {
+        Geometry.fit(grid: grid(ternGrid), base: ternBlock, focused: true, scale: 2, physical: false, cursor: cursor, caret: 2).placement
+    }
+
+    func testTernCaretMovesThePopupPastTheBlockPadding() throws {
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 131.84375, width: 2, height: 20)))
+        XCTAssertEqual(placement.x, 37.234375, accuracy: 0.001)
+        XCTAssertEqual(placement.yTop, 131.84375, accuracy: 0.001)
+        XCTAssertEqual(placement.yBelow, 151.84375, accuracy: 0.001)
+    }
+
+    func testFocusedElementOnAnotherRowIsIgnored() throws {
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 171.84375, width: 2, height: 20)))
+        XCTAssertEqual(placement.x, 9.234375 + 18, accuracy: 0.001)
+        XCTAssertEqual(placement.yTop, 81.84375 + 40, accuracy: 0.001)
+    }
+
+    func testFocusedElementThatIsNotCaretShapedIsIgnored() throws {
+        let placement = try XCTUnwrap(tern(cursor: CGRect(x: 55.234375, y: 131.84375, width: 300, height: 120)))
+        XCTAssertEqual(placement.yTop, 81.84375 + 40, accuracy: 0.001)
+    }
+
     func testOnlyAScrollAreaParentClipsTheSurface() {
         for role in ["AXGroup", "AXSplitGroup", "AXWindow", "?", nil] {
             XCTAssertEqual(surface(textArea, in: scrollArea, role: role), textArea)

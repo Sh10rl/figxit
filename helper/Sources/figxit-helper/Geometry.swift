@@ -76,7 +76,9 @@ enum Geometry {
         return (element, AXNode(depth: 0, role: axRole(element), frame: axFrame(element).map(Rect.init)))
     }
 
-    static func axSurface(pid: pid_t) -> CGRect? {
+    /// The surface frame, plus the focused element's frame when the surface is one of its ancestors.
+    /// Terminals such as Tern focus a hidden input that tracks the cursor, so that frame is the caret.
+    static func axSurface(pid: pid_t) -> (frame: CGRect, cursor: CGRect?)? {
         let app = AXUIElementCreateApplication(pid)
         var element = axElement(app, kAXFocusedUIElementAttribute)
         if element == nil, !treeRequested.contains(pid) {
@@ -84,13 +86,16 @@ enum Geometry {
             AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
             element = axElement(app, kAXFocusedUIElementAttribute)
         }
-        for _ in 0...surfaceDepth {
+        var cursor: CGRect?
+        for depth in 0...surfaceDepth {
             guard let current = element, axRole(current) != kAXWindowRole as String else { return nil }
             element = axElement(current, kAXParentAttribute)
-            if let frame = axFrame(current),
+            let frame = axFrame(current)
+            if let frame = frame,
                let surface = visibleSurface(frame, parentRole: element.map(axRole), parentFrame: element.flatMap(axFrame)) {
-                return surface
+                return (surface, cursor)
             }
+            if depth == 0 { cursor = frame }
         }
         return nil
     }
@@ -139,19 +144,34 @@ enum Geometry {
         return abs(scaled - estimate) <= abs(raw - estimate) ? scaled : raw
     }
 
-    static func placement(grid: Grid, terminal: Terminal) -> Placement? {
-        locate(grid: grid, terminal: terminal, window: cgWindowFrame(pid: terminal.pid)).placement
+    static func placement(grid: Grid, terminal: Terminal, caret: Int) -> Placement? {
+        locate(grid: grid, terminal: terminal, window: cgWindowFrame(pid: terminal.pid), caret: caret).placement
     }
 
-    static func locate(grid: Grid, terminal: Terminal, window: CGRect?) -> (placement: Placement?, split: Bool) {
+    static func locate(grid: Grid, terminal: Terminal, window: CGRect?, caret: Int = 0) -> (placement: Placement?, split: Bool) {
         if grid.right == true, grid.cellPxW == nil || grid.cellPxH == nil { return (nil, false) }
         let surface = AXIsProcessTrusted() ? axSurface(pid: terminal.pid) : nil
-        guard let base = surface ?? window else { return (nil, false) }
+        guard let base = surface?.frame ?? window else { return (nil, false) }
         let scale = screen(containing: base)?.backingScaleFactor ?? 2
-        return fit(grid: grid, base: base, focused: surface != nil, scale: scale, physical: terminal.bundleId == physicalPixels)
+        return fit(grid: grid, base: base, focused: surface != nil, scale: scale, physical: terminal.bundleId == physicalPixels,
+                   cursor: surface?.cursor, caret: caret)
     }
 
-    static func fit(grid: Grid, base: CGRect, focused: Bool, scale: CGFloat, physical: Bool) -> (placement: Placement?, split: Bool) {
+    /// How far a caret-shaped focused element sits from where the grid puts the cursor.
+    /// Corrects a surface frame that includes the terminal's own padding. Only shifts by less than
+    /// one row, so a stale or unrelated focused element never moves the popup to another line.
+    static func cursorOffset(_ cursor: CGRect, x: CGFloat, yTop: CGFloat, cellW: CGFloat, cellH: CGFloat) -> CGVector? {
+        guard cursor.width <= cellW * 1.5,
+              cursor.height >= cellH * 0.6, cursor.height <= cellH * 1.5
+        else { return nil }
+        let dy = cursor.minY - yTop
+        guard abs(dy) < cellH else { return nil }
+        let dx = cursor.minX - x
+        return CGVector(dx: abs(dx) < 2 * cellW ? dx : 0, dy: dy)
+    }
+
+    static func fit(grid: Grid, base: CGRect, focused: Bool, scale: CGFloat, physical: Bool,
+                    cursor: CGRect? = nil, caret: Int = 0) -> (placement: Placement?, split: Bool) {
         if grid.right == true, grid.cellPxW == nil || grid.cellPxH == nil { return (nil, false) }
         let padX = CGFloat(grid.padX ?? 0)
         let padY = CGFloat(grid.padY ?? 0)
@@ -210,8 +230,13 @@ enum Geometry {
             top = base.minY + max(0, base.height - rows * cellH - 2 * padY)
         }
 
-        let x = base.minX + padX + (span(cellW) - cols + CGFloat(grid.col)) * cellW
-        let yTop = top + padY + CGFloat(grid.row) * cellH
+        var x = base.minX + padX + (span(cellW) - cols + CGFloat(grid.col)) * cellW
+        var yTop = top + padY + CGFloat(grid.row) * cellH
+        if source == "ax", let cursor = cursor,
+           let offset = cursorOffset(cursor, x: x + CGFloat(caret) * cellW, yTop: yTop, cellW: cellW, cellH: cellH) {
+            x += offset.dx
+            yTop += offset.dy
+        }
         return (Placement(
             source: source,
             surface: Rect(base),

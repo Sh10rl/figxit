@@ -197,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard current?.frame != shown.frame else { return }
         self.shown?.frame = current?.frame
         if Caret.handles(terminal) { return placeAtCaret() }
-        if let placement = Geometry.locate(grid: shown.grid, terminal: terminal, window: current?.frame).placement {
+        if let placement = Geometry.locate(grid: shown.grid, terminal: terminal, window: current?.frame, caret: shown.caret).placement {
             popup.show(items: shown.items, selected: shown.selected, placement: placement)
         }
     }
@@ -222,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let terminal = Geometry.frontTerminal()
         else { return popup.hide() }
         if Caret.handles(terminal) { return placeAtCaret() }
-        guard let placement = Geometry.placement(grid: shown.grid, terminal: terminal) else { return popup.hide() }
+        guard let placement = Geometry.placement(grid: shown.grid, terminal: terminal, caret: shown.caret) else { return popup.hide() }
         popup.show(items: shown.items, selected: shown.selected, placement: placement)
     }
 
@@ -243,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 placeAtCaret()
                 return try? encoder.encode(StatusReply(ok: true, error: nil, placement: nil))
             }
-            let located = terminal.map { Geometry.locate(grid: grid, terminal: $0, window: window?.frame) }
+            let located = terminal.map { Geometry.locate(grid: grid, terminal: $0, window: window?.frame, caret: request.caret ?? 0) }
             guard let terminal = terminal, let placement = located?.placement else {
                 if located?.split == true, !AXIsProcessTrusted() { status?.splitWithoutAccess() }
                 forget()
