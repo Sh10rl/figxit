@@ -238,10 +238,11 @@ Specs maintained by Figxit, for tools Fig does not cover well, live in `engine/s
 
 Figxit runs on your Mac. It reads your shell history and the files in the current folder, and sends neither anywhere.
 
-Figxit makes two kinds of network requests, both to figxit.com:
+Figxit makes these network requests, to figxit.com unless noted:
 
 - The daily update check, which reads one file. I count those checks and the app downloads by version and date, with no IP address and no identifier. You can turn the check off in Settings.
 - Extra completions, only the ones you download. When an app update changes one you have, the engine downloads the new version.
+- carapace, only after you download it: a daily check of carapace's latest GitHub release, and the download of a new release, both from github.com.
 
 Words from your history that look like secrets, such as a `--token` value or `API_KEY=...`, are not shown.
 
