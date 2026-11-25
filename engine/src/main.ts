@@ -306,21 +306,24 @@ async function extrasCommand(args: string[]): Promise<number> {
     return error ? 1 : 0;
   }
   const carapace = carapaceStatus();
-  const list = [
+  const list: { name: string; title: string; state: string; bytes: number; size: number; note?: string }[] = [
     ...extras(),
     {
       name: "carapace",
-      title: carapace.installed ? `carapace ${carapace.version}, ${carapace.commands} tools kept current` : "Current completions for 1000 tools, from carapace",
+      title: "carapace",
       state: !carapace.installed ? "missing" : carapace.latest && carapace.latest !== carapace.version ? "outdated" : "installed",
       bytes: carapace.bytes,
       size: carapace.size,
+      note: carapace.installed
+        ? `${carapace.version}, ${carapace.commands} tools kept current`
+        : "Current completions for 1000 tools",
     },
   ];
   if (action === "--json") {
     const { brandIcon } = await import("./brands");
     const fallback = (name: string) =>
       name === "carapace" ? { icon: "sf:arrow.triangle.2.circlepath", tint: "8E44AD" } : { icon: "sf:cloud.fill", tint: name === "az" ? "0078D4" : "FF9900" };
-    const rows = list.map(({ name, title, state, bytes, size }) => ({ name, title, state, bytes, size, ...(brandIcon(name) ?? fallback(name)) }));
+    const rows = list.map(({ name, title, state, bytes, size, note }) => ({ name, title, state, bytes, size, note, ...(brandIcon(name) ?? fallback(name)) }));
     console.log(JSON.stringify(rows));
     return 0;
   }

@@ -9,6 +9,8 @@ private struct Extra: Decodable {
     let state: String
     let bytes: Int
     let size: Int
+    /// Shown before the size, like the version of carapace. The title stays a short name.
+    let note: String?
     let icon: String
     let tint: String
 }
@@ -243,11 +245,13 @@ final class SettingsWindow: NSObject {
             } else if busy {
                 detail = "Downloading \(Self.megabytes(extra.bytes))…"
             } else if extra.state == "installed" {
-                detail = "Installed. \(Self.megabytes(extra.size)) on disk."
+                detail = "\(extra.note.map { "\($0). " } ?? "Installed. ")\(Self.megabytes(extra.size)) on disk."
             } else if extra.state == "outdated" {
-                detail = "A new version is available. \(Self.megabytes(extra.bytes)) download."
+                detail = "\(extra.note.map { "\($0). " } ?? "")A new version is available. \(Self.megabytes(extra.bytes)) download."
+            } else if extra.size == 0 {
+                detail = "\(extra.note.map { "\($0). " } ?? "")\(Self.megabytes(extra.bytes)) download."
             } else {
-                detail = "\(Self.megabytes(extra.bytes)) download, \(Self.megabytes(extra.size)) on disk."
+                detail = "\(extra.note.map { "\($0). " } ?? "")\(Self.megabytes(extra.bytes)) download, \(Self.megabytes(extra.size)) on disk."
             }
             var trailing: [NSView] = []
             if busy {
@@ -275,7 +279,7 @@ final class SettingsWindow: NSObject {
                 }
                 trailing.append(button)
             }
-            return Panel.row(icon: extra.icon, tint: extra.tint, title: extra.title, tag: extra.name, detail: detail, trailing: trailing)
+            return Panel.row(icon: extra.icon, tint: extra.tint, title: extra.title, tag: extra.title == extra.name ? nil : extra.name, detail: detail, trailing: trailing)
         }
         Panel.fill(extras, rows)
         extrasCard?.isHidden = rows.isEmpty
