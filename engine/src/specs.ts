@@ -17,6 +17,8 @@ export interface Position {
   path: Spec[];
   used: Set<string>;
   optionArg: Spec | null;
+  /** The pending option arg is variadic and already has a value, so it may end here. */
+  optionArgTaken: boolean;
   arg: Spec | null;
   allowSubcommands: boolean;
   afterDashes: boolean;
@@ -228,6 +230,7 @@ export async function locate(spec: Spec, words: string[], cwd = "/"): Promise<Po
     path,
     used,
     optionArg: pending[0] ?? null,
+    optionArgTaken: pending.length > 0 && variadicTaken,
     arg: list<Spec>(node.args)[argIndex] ?? null,
     allowSubcommands: !positional,
     afterDashes,
@@ -334,8 +337,10 @@ export function emit(position: Position, prefix: string): Emitted {
   };
 
   if (position.optionArg) {
-    addArg(position.optionArg);
-    if (!position.optionArg.isOptional) return out;
+    const ends = position.optionArg.isOptional || position.optionArgTaken;
+    // Same rule as locate: a word starting with "-" ends an optional or already filled option arg.
+    if (!(ends && prefix.startsWith("-") && !position.afterDashes)) addArg(position.optionArg);
+    if (!ends) return out;
   }
 
   if (prefix.startsWith("-") && !position.afterDashes) {

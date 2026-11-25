@@ -814,6 +814,42 @@ describe("safety", () => {
   });
 });
 
+describe("options after a variadic option value", () => {
+  registerSpec("crate", {
+    name: "crate",
+    subcommands: [
+      {
+        name: "test",
+        options: [
+          {
+            name: ["-p", "--package"],
+            isRepeatable: true,
+            args: { name: "package", isVariadic: true, generators: { custom: async () => [{ name: "oscamp-cli" }, { name: "syscall_wrapper" }] } },
+          },
+          { name: "--lib", description: "Test only the library" },
+          { name: "--doc", description: "Test only the docs" },
+        ],
+      },
+    ],
+  });
+  const labels = async (buffer: string) =>
+    ((await suggest(buffer, buffer.length, "/", historyOf([]), NOW))?.items ?? []).map((i) => i.label);
+
+  test("a dash after the first package lists options, not more packages", async () => {
+    expect(await labels("crate test -p syscall_wrapper -")).toEqual(expect.arrayContaining(["--lib", "--doc"]));
+    expect(await labels("crate test -p syscall_wrapper -")).not.toContain("oscamp-cli");
+    expect(await labels("crate test -p syscall_wrapper --l")).toEqual(["--lib"]);
+  });
+
+  test("the first package is still required before options", async () => {
+    expect(await labels("crate test -p o")).toEqual(["oscamp-cli"]);
+  });
+
+  test("more packages can still follow the first one", async () => {
+    expect(await labels("crate test -p syscall_wrapper o")).toContain("oscamp-cli");
+  });
+});
+
 describe("specs", () => {
   let customRuns = 0;
   registerSpec("tool", {
