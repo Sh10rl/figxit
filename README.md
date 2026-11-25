@@ -11,14 +11,14 @@ Free and open source. No account, no AI chat, no telemetry.
 ## Features
 
 - **Commands you run, with their icons**: type `p` for `python3`, `pnpm`, `psql`
-- **Subcommands and options** for 700+ tools: `git ch`, `docker run --`
+- **Subcommands and options** for 700+ tools: `git ch`, `docker run --`, kept current for 1000 tools with [carapace](#carapace-completions)
 - **Live values**: git branches, SSH hosts, files and folders
 - **Makefile targets and `package.json` scripts**, with their help text
 - **Ranked by your history** in the current folder, with [Atuin](https://atuin.sh)
 - **Red icons for production**: Enter inserts those rows without running them
 - **Your aliases**: `k get ` completes like `kubectl get `, and `git co ` like `git checkout `
 - **zoxide**: `z rack` lists the folders `z` would jump to
-- **zsh, bash, and fish**, in Ghostty, iTerm2, Terminal, tmux, and the terminals of VS Code, Cursor, and Zed (experimental)
+- **zsh, bash, and fish**, in Ghostty, iTerm2, Terminal, Tern, tmux, and the terminals of VS Code, Cursor, and Zed (experimental)
 
 ## Why it exists
 
@@ -46,6 +46,33 @@ Figxit uses the open source Fig specs for 700+ tools. Type a command and a space
 </picture>
 
 Specs also fill in live values: git branches after `git checkout `, hosts after `ssh `, files and folders where a command takes a path. Your git and gh aliases work too: `git co ` completes like `git checkout `. So do your shell aliases and fish abbreviations: with `alias k=kubectl`, `k get ` completes like `kubectl get `. For a shell function or anything else your shell doesn't list as an alias, add a line like `k=kubectl` to `~/.config/figxit/aliases`. The file takes the lines `alias` prints, its lines win over your shell's aliases, and edits apply right away.
+
+The Fig specs stopped updating in May 2025, so newer options can be missing, like `cargo build --artifact-dir`. [carapace completions](#carapace-completions) fill them in.
+
+### Your own specs
+
+For a tool with no spec, or to replace one, put a Fig spec in `~/.config/figxit/specs/<command>.js`, for example `prlctl.js` for `prlctl`. It takes the format of [withfig/autocomplete](https://github.com/withfig/autocomplete), with the types in [index.d.ts](https://github.com/withfig/autocomplete-tools/blob/main/types/index.d.ts):
+
+```js
+export default {
+  name: "prlctl",
+  subcommands: [
+    {
+      name: "start",
+      description: "Start a VM",
+      args: {
+        name: "vm",
+        generators: {
+          script: ["prlctl", "list", "--all", "--output", "name", "--no-header"],
+          splitOn: "\n",
+        },
+      },
+    },
+  ],
+};
+```
+
+A spec there replaces the whole spec of that command, from carapace and from Fig. Edits apply at the next key. Figxit skips a file, or a folder, that someone other than you or root owns, or that others can write to.
 
 ### Makefile targets and scripts
 
@@ -145,7 +172,7 @@ After Esc, the shell waits to tell it apart from arrow keys: 400 ms in zsh, 500 
 | | Supported |
 |---|---|
 | Shells | zsh, bash 5 or later, fish 4 or later |
-| Terminals | Ghostty, iTerm2, Terminal |
+| Terminals | Ghostty, iTerm2, Terminal, Tern (with Accessibility) |
 | Editors | VS Code and Cursor, with Accessibility. Zed, experimental, with a setting |
 | Multiplexers | tmux and herdr, in any terminal app |
 | Not tested yet | WezTerm, Alacritty, and kitty without tmux, other editors built on VS Code, JetBrains IDEs |
@@ -193,10 +220,13 @@ These need Accessibility, and the list stays hidden without it:
 - a split of the terminal app, like Cmd+D in iTerm2 or Ghostty, with or without tmux
 - one tmux session attached in two splits (the list shows in the focused one)
 - the terminal in VS Code or Cursor, with or without tmux
+- Tern, whose shells sit in blocks next to its sidebar and agent panes
 
 To allow it, click **Allow…** in Figxit Setup or in Settings, then turn on Figxit in System Settings > Privacy & Security > Accessibility (called Device Control and Data Access in macOS 27). Figxit opens Setup the first time it finds one of these terminals without the permission, and `figxit doctor` shows the state.
 
 Figxit uses Accessibility to read the position and size of the focused text area, nothing else. It does not read the text, and it does not click or type. In editors built on Electron, like VS Code, it also turns on the accessibility tree the first time you type in the terminal, so the first list after the editor starts can be missing.
+
+In Tern, the list follows the cursor, also below output that Lenses redraw.
 
 Splits are tested in iTerm2 and Ghostty, and editor terminals in VS Code and Cursor. Other editors built on VS Code use the same terminal but are not tested yet.
 
@@ -255,11 +285,11 @@ make test                  # unit tests
 make build                 # build dist/Figxit.app
 ```
 
-You need [Bun](https://bun.sh) and the Xcode command line tools.
+You need [Bun](https://bun.sh) and the Xcode command line tools. `make test` also runs the Swift tests of the app, which need the full Xcode for XCTest.
 
 ## Credits
 
-Completion specs from [withfig/autocomplete](https://github.com/withfig/autocomplete) (MIT). Tool icons from [Simple Icons](https://simpleicons.org) (CC0), and the logos belong to their owners. Updates by [Sparkle](https://sparkle-project.org) (MIT).
+Completion specs from [withfig/autocomplete](https://github.com/withfig/autocomplete) (MIT). Current completions from [carapace-bin](https://github.com/carapace-sh/carapace-bin) (MIT), downloaded on request and not bundled. Tool icons from [Simple Icons](https://simpleicons.org) (CC0), and the logos belong to their owners. Updates by [Sparkle](https://sparkle-project.org) (MIT).
 
 Figxit is not affiliated with Fig, Amazon, or Kiro.
 
