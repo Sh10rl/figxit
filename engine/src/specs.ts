@@ -4,7 +4,7 @@ import { brandIcon, ICONS, type Icon } from "./brands";
 import { expandAlias } from "./generators";
 import { FIGXIT_ICONS, FIGXIT_SPECS, PATCHES } from "./figxit";
 import { extraRoot, extraSource } from "./extras";
-import { specsDir, trusted, userSpecsDir } from "./paths";
+import { carapaceSpecsDir, specsDir, trusted, userSpecsDir } from "./paths";
 import { loadVersioned } from "./versioned";
 import type { Candidate } from "./sources";
 
@@ -81,17 +81,18 @@ async function versionedSpec(name: string, dir: string): Promise<Spec | null> {
   }
 }
 
+// The user's own specs win over generated carapace specs, which win over the bundled Fig specs.
 function userSpec(name: string): { file: string; stamp: string } | null {
   if (name.split("/").some((part) => /^\.+$/.test(part))) return null;
-  const dir = userSpecsDir();
-  const file = join(dir, `${name}.js`);
-  try {
-    const stat = statSync(file);
-    if (!stat.isFile() || !trusted(stat) || !trusted(statSync(dir))) return null;
-    return { file, stamp: `${stat.mtimeMs}:${stat.size}` };
-  } catch {
-    return null;
+  for (const dir of [userSpecsDir(), carapaceSpecsDir()]) {
+    const file = join(dir, `${name}.js`);
+    try {
+      const stat = statSync(file);
+      if (!stat.isFile() || !trusted(stat) || !trusted(statSync(dir))) continue;
+      return { file, stamp: `${file}:${stat.mtimeMs}:${stat.size}` };
+    } catch {}
   }
+  return null;
 }
 
 const userModules = new Map<string, { stamp: string; spec: Promise<Spec | null> }>();

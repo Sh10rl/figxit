@@ -38,6 +38,11 @@ export function userSpecsDir(): string {
   return process.env.FIGXIT_USER_SPECS ?? join(configDir(), "specs");
 }
 
+/** Generated specs (carapace2fig): below the user's own specs, above the bundled Fig specs. */
+export function carapaceSpecsDir(): string {
+  return process.env.FIGXIT_CARAPACE_SPECS ?? join(configDir(), "carapace-specs");
+}
+
 export function userAliasesFile(): string {
   return process.env.FIGXIT_USER_ALIASES ?? join(configDir(), "aliases");
 }

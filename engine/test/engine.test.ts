@@ -1,5 +1,6 @@
 process.env.FIGXIT_SPECS = "off";
 process.env.FIGXIT_USER_SPECS = "/nonexistent/figxit-user-specs";
+process.env.FIGXIT_CARAPACE_SPECS = "/nonexistent/figxit-carapace-specs";
 process.env.FIGXIT_USER_ALIASES = "/nonexistent/figxit-user-aliases";
 
 import { describe, expect, test } from "bun:test";
@@ -1227,6 +1228,26 @@ describe("user specs in ~/.config/figxit/specs", () => {
       expect(await subcommands("tool-c")).toEqual(["second"]);
       rmSync(file);
       expect(await subcommands("tool-c")).toEqual(["bundled"]);
+    });
+  });
+
+  test("a generated carapace spec sits between the user's spec and the bundled one", async () => {
+    await withUserSpecs(async (dir) => {
+      const generated = mkdtempSync(join(tmpdir(), "figxit-carapace-specs-"));
+      const saved = process.env.FIGXIT_CARAPACE_SPECS;
+      process.env.FIGXIT_CARAPACE_SPECS = generated;
+      try {
+        registerSpec("tool-g", { name: "tool-g", subcommands: [{ name: "bundled" }] });
+        writeFileSync(join(generated, "tool-g.js"), spec('{ name: "tool-g", subcommands: [{ name: "carapace" }] }'));
+        expect(await subcommands("tool-g")).toEqual(["carapace"]);
+        writeFileSync(join(dir, "tool-g.js"), spec('{ name: "tool-g", subcommands: [{ name: "mine" }] }'));
+        expect(await subcommands("tool-g")).toEqual(["mine"]);
+        rmSync(join(dir, "tool-g.js"));
+        expect(await subcommands("tool-g")).toEqual(["carapace"]);
+      } finally {
+        process.env.FIGXIT_CARAPACE_SPECS = saved;
+        rmSync(generated, { recursive: true });
+      }
     });
   });
 
