@@ -210,7 +210,7 @@ final class SettingsWindow: NSObject {
         String(format: "%.1f MB", Double(bytes) / 1e6)
     }
 
-    private static func runEngine(_ arguments: [String]) -> (ok: Bool, output: Data, error: String) {
+    static func runEngine(_ arguments: [String]) -> (ok: Bool, output: Data, error: String) {
         guard let cli = Install.cliURL, FileManager.default.isExecutableFile(atPath: cli.path) else {
             return (false, Data(), "Figxit's engine was not found")
         }

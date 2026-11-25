@@ -4,6 +4,7 @@ import type { Socket } from "bun";
 import { herdrGrid, parseShell, placeInPane, termPad, tmuxGrid, tmuxOrigin, tmuxQuery, type Grid, type HerdrTarget, type Origin, type TmuxTarget } from "./geometry";
 import { Helper } from "./helper";
 import { History } from "./history";
+import { updateCarapace } from "./carapace";
 import { addExtra, downloadable, updateExtras } from "./extras";
 import { aliasesFor, shellAliases, sweepAliases } from "./aliases";
 import { ENGINE_SOCK, SHELL_ALIASES } from "./paths";
@@ -474,4 +475,7 @@ export async function daemon() {
   chmodSync(SOCK, 0o600);
   setInterval(checkFocus, FOCUS_MS);
   updateExtras();
+  // Checks at most once a day itself; the hourly tick only catches a daemon that stays up for days.
+  updateCarapace();
+  setInterval(() => updateCarapace(), 3_600_000);
 }

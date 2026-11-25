@@ -38,9 +38,14 @@ export function userSpecsDir(): string {
   return process.env.FIGXIT_USER_SPECS ?? join(configDir(), "specs");
 }
 
-/** Generated specs (carapace2fig): below the user's own specs, above the bundled Fig specs. */
+/** Specs generated from carapace: below the user's own specs, above the bundled Fig specs. */
 export function carapaceSpecsDir(): string {
   return process.env.FIGXIT_CARAPACE_SPECS ?? join(configDir(), "carapace-specs");
+}
+
+/** Figxit's own carapace binary, config and cache, apart from any carapace the user installed. */
+export function carapaceHome(): string {
+  return process.env.FIGXIT_CARAPACE_HOME ?? join(STATE, "carapace");
 }
 
 export function userAliasesFile(): string {

@@ -164,6 +164,20 @@ figxit extras remove aws  # remove it
 
 Until you download one, typing `aws ` (or `az `, `gcloud `) shows a row to download it at the top of the list. Pick it with Tab, or with the arrow keys and Enter. It stops showing after five times if you don't pick it.
 
+### carapace completions
+
+The Fig specs stopped updating in May 2025. Figxit can keep completions current with [carapace](https://carapace.sh), which covers 1000 tools. The setup window offers it once, and it is in Settings > Extra completions:
+
+```bash
+figxit extras add carapace     # download carapace (20 MB) and write its completions
+figxit carapace update         # check for a new carapace now
+figxit extras remove carapace  # remove it
+```
+
+Figxit merges carapace's subcommands, options, and descriptions into the Fig spec of the same command, keeps Fig's own value lists, and asks carapace for values Fig does not list. Nothing from the Fig spec is removed. Once a day it checks GitHub for a new carapace release and writes the completions again after an update.
+
+This carapace is Figxit's own copy in `~/.local/state/figxit/carapace`, apart from any carapace you install with brew. Figxit runs it by its path, with its own config and cache folders, so your carapace specs and overlays do not change Figxit's list, and Figxit never writes to your carapace's folders. The generated completions are in `~/.config/figxit/carapace-specs`. Your own specs in `~/.config/figxit/specs` still win over them.
+
 ## Panes, editors, and Accessibility
 
 To place the list, Figxit needs to know where the text area of your terminal is on screen. Without Accessibility, macOS only tells it where the window is. That is enough when one shell fills the window, but not when the window has more than one text area.

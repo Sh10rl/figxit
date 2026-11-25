@@ -1,10 +1,11 @@
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { brandIcon, ICONS, type Icon } from "./brands";
 import { expandAlias } from "./generators";
 import { FIGXIT_ICONS, FIGXIT_SPECS, PATCHES } from "./figxit";
 import { extraRoot, extraSource } from "./extras";
-import { carapaceSpecsDir, specsDir, trusted, userSpecsDir } from "./paths";
+import { carapaceTreeFile, mergeCarapace, parseCarapaceTree } from "./carapace";
+import { specsDir, trusted, userSpecsDir } from "./paths";
 import { loadVersioned } from "./versioned";
 import type { Candidate } from "./sources";
 
@@ -81,34 +82,57 @@ async function versionedSpec(name: string, dir: string): Promise<Spec | null> {
   }
 }
 
-// The user's own specs win over generated carapace specs, which win over the bundled Fig specs.
 function userSpec(name: string): { file: string; stamp: string } | null {
   if (name.split("/").some((part) => /^\.+$/.test(part))) return null;
-  for (const dir of [userSpecsDir(), carapaceSpecsDir()]) {
-    const file = join(dir, `${name}.js`);
-    try {
-      const stat = statSync(file);
-      if (!stat.isFile() || !trusted(stat) || !trusted(statSync(dir))) continue;
-      return { file, stamp: `${file}:${stat.mtimeMs}:${stat.size}` };
-    } catch {}
+  const dir = userSpecsDir();
+  const file = join(dir, `${name}.js`);
+  try {
+    const stat = statSync(file);
+    if (!stat.isFile() || !trusted(stat) || !trusted(statSync(dir))) return null;
+    return { file, stamp: `${stat.mtimeMs}:${stat.size}` };
+  } catch {
+    return null;
   }
-  return null;
 }
 
 const userModules = new Map<string, { stamp: string; spec: Promise<Spec | null> }>();
+const carapaceModules = new Map<string, { stamp: string; spec: Promise<Spec | null> }>();
 
+// The user's own spec wins; then a tree generated from carapace, merged into the bundled Fig spec;
+// then the bundled Fig spec alone.
 export function loadSpec(name: string): Promise<Spec | null> {
   const user = NAME.test(name) ? userSpec(name) : null;
   if (!user) {
     userModules.delete(name);
-    return bundledSpec(name);
+    return carapaceSpec(name);
   }
   let entry = userModules.get(name);
   if (entry?.stamp !== user.stamp) {
     entry = { stamp: user.stamp, spec: importSpec(name, `${user.file}?${encodeURIComponent(user.stamp)}`) };
     userModules.set(name, entry);
   }
-  return entry.spec.then((spec) => spec ?? bundledSpec(name));
+  return entry.spec.then((spec) => spec ?? carapaceSpec(name));
+}
+
+function carapaceSpec(name: string): Promise<Spec | null> {
+  const tree = carapaceTreeFile(name);
+  if (!tree) {
+    carapaceModules.delete(name);
+    return bundledSpec(name);
+  }
+  let entry = carapaceModules.get(name);
+  if (entry?.stamp !== tree.stamp) {
+    const spec = bundledSpec(name).then((fig) => {
+      try {
+        return mergeCarapace(fig, parseCarapaceTree(readFileSync(tree.file, "utf8")));
+      } catch {
+        return fig;
+      }
+    });
+    entry = { stamp: tree.stamp, spec };
+    carapaceModules.set(name, entry);
+  }
+  return entry.spec;
 }
 
 function bundledSpec(name: string): Promise<Spec | null> {

@@ -193,6 +193,24 @@ enum Install {
         }
     }
 
+    static var carapaceHome: String {
+        ProcessInfo.processInfo.environment["FIGXIT_CARAPACE_HOME"]
+            ?? (stoppedFlag as NSString).deletingLastPathComponent + "/carapace"
+    }
+
+    /// Figxit's own carapace, apart from any carapace the user installed.
+    static var carapaceVersion: String? {
+        guard FileManager.default.isExecutableFile(atPath: carapaceHome + "/bin/carapace") else { return nil }
+        let data = FileManager.default.contents(atPath: carapaceHome + "/state.json") ?? Data()
+        let state = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        return state?["version"] as? String ?? ""
+    }
+
+    /// Set once Figxit has offered carapace, so the offer opens the setup window only one time.
+    static var carapaceOfferedFlag: String {
+        (stoppedFlag as NSString).deletingLastPathComponent + "/carapace-offered"
+    }
+
     static var engineRunning: Bool {
         SocketServer(path: engineSocket) { _ in nil }.alreadyRunning()
     }
@@ -279,7 +297,27 @@ enum Checks {
             Check(icon: "sf:clock.arrow.circlepath", tint: "8E8E93", title: "Atuin history",
                   detail: "Optional. Ranks the rows by your history.",
                   status: history ? "Found" : "Not found", level: history ? .ok : .off),
+            carapace(),
         ]
+    }
+
+    static var carapaceBusy = false
+
+    static func carapace() -> Check {
+        let version = Install.carapaceVersion
+        let detail: String
+        if carapaceBusy {
+            detail = "Downloading and writing completions…"
+        } else if let version {
+            detail = "Current completions for 1000 tools\(version.isEmpty ? "" : ", carapace \(version)")."
+        } else {
+            detail = "Optional. Current completions for 1000 tools. 20 MB."
+        }
+        return Check(icon: "sf:arrow.triangle.2.circlepath", tint: "8E44AD", title: "carapace completions",
+                     detail: detail,
+                     status: carapaceBusy ? "Downloading" : version != nil ? "Installed" : "Not installed",
+                     level: version != nil ? .ok : .off,
+                     action: version != nil || carapaceBusy ? nil : ("Download", #selector(SetupWindow.installCarapace)))
     }
 }
 
@@ -609,6 +647,22 @@ final class SetupWindow: NSObject {
         status.stringValue = "Turn on Figxit in the list that System Settings opened."
     }
 
+    @objc func installCarapace() {
+        Checks.carapaceBusy = true
+        reload()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = SettingsWindow.runEngine(["extras", "add", "carapace"])
+            DispatchQueue.main.async { [weak self] in
+                Checks.carapaceBusy = false
+                if !result.ok {
+                    let message = result.error.hasPrefix("figxit: ") ? String(result.error.dropFirst(8)) : result.error
+                    self?.status.stringValue = "carapace: \(message)"
+                }
+                self?.reload()
+            }
+        }
+    }
+
     @objc private func copyLoginFix(_ sender: NSButton) {
         guard let fix = Shell.allCases[sender.tag].loginFix else { return }
         NSPasteboard.general.clearContents()
@@ -724,7 +778,14 @@ final class StatusController: NSObject, NSMenuDelegate {
     }
 
     func showSetup(onlyIfNeeded: Bool) {
-        if onlyIfNeeded && Checks.ready { return }
+        if onlyIfNeeded && Checks.ready {
+            // Set up already: open once more only to offer carapace, and never again after that.
+            guard Install.carapaceVersion == nil, !FileManager.default.fileExists(atPath: Install.carapaceOfferedFlag) else { return }
+            FileManager.default.createFile(atPath: Install.carapaceOfferedFlag, contents: nil)
+            setup.show(note: "New: Figxit can keep completions current with carapace. Click Download on carapace completions.")
+            return
+        }
+        FileManager.default.createFile(atPath: Install.carapaceOfferedFlag, contents: nil)
         setup.show()
     }
 

@@ -2,7 +2,8 @@ import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync
 import { homedir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { version } from "../package.json";
-import { appPath, atuinDb, atuinPaths, bundlePath, ENGINE_SOCK, HELPER_SOCK, specsDir } from "./paths";
+import { carapaceStatus, installCarapace, removeCarapace, updateCarapace } from "./carapace";
+import { appPath, atuinDb, atuinPaths, bundlePath, carapaceHome, ENGINE_SOCK, HELPER_SOCK, specsDir } from "./paths";
 
 const HELP = `figxit ${version}
 
@@ -12,8 +13,9 @@ Usage:
   figxit open        Show the menu bar icon and open Settings
   figxit stop        Stop them
   figxit doctor      Check the installation
-  figxit extras      List the extra completions you can download, like aws
+  figxit extras      List the extra completions you can download, like aws and carapace
   figxit extras add aws     Download one. Also: extras remove aws
+  figxit carapace update    Check for a new carapace now and write its completions again
   figxit --version   Print the version
 `;
 
@@ -257,6 +259,7 @@ async function doctor(fromApp: boolean, json: boolean): Promise<number> {
     [await reachable(HELPER_SOCK), "popup helper", HELPER_SOCK],
     [await reachable(ENGINE_SOCK), "engine", ENGINE_SOCK],
     [specCount > 0, "completion specs", specs ? `${specCount} in ${specs}` : "not found"],
+    carapaceCheck(),
     [atuin !== null, "atuin history", atuin ?? `not found in ${looked}, ranking is off`],
     [shells > 0, "shells connected", shells > 0 ? String(shells) : `none, run ${login.reload} in each open terminal`],
   ];
@@ -275,7 +278,7 @@ async function doctor(fromApp: boolean, json: boolean): Promise<number> {
   if (access !== null) checks.push([access, "accessibility", accessDetail(access, splitSeen)]);
   if (!fromApp) checks.push(...shell);
   if (json) {
-    const optional = new Set(["atuin history", "tmux", ...(splitSeen ? [] : ["accessibility"]), ...Object.keys(SHELLS)]);
+    const optional = new Set(["atuin history", "carapace", "tmux", ...(splitSeen ? [] : ["accessibility"]), ...Object.keys(SHELLS)]);
     console.log(JSON.stringify(checks.map(([ok, name, detail]) => ({ level: ok ? "ok" : ok !== null && optional.has(name) ? "off" : "bad", name, detail }))));
     return 0;
   }
@@ -295,25 +298,55 @@ async function extrasCommand(args: string[]): Promise<number> {
       console.error(`Usage: figxit extras ${action} <name>`);
       return 1;
     }
-    const error = action === "add" ? await addExtra(name) : removeExtra(name);
+    let error: string | null = null;
+    if (name !== "carapace") error = action === "add" ? await addExtra(name) : removeExtra(name);
+    else if (action === "add") error = await installCarapace();
+    else removeCarapace();
     if (error) console.error(`figxit: ${error}`);
     return error ? 1 : 0;
   }
-  const list = extras();
+  const carapace = carapaceStatus();
+  const list = [
+    ...extras(),
+    {
+      name: "carapace",
+      title: carapace.installed ? `carapace ${carapace.version}, ${carapace.commands} tools kept current` : "Current completions for 1000 tools, from carapace",
+      state: !carapace.installed ? "missing" : carapace.latest && carapace.latest !== carapace.version ? "outdated" : "installed",
+      bytes: carapace.bytes,
+      size: carapace.size,
+    },
+  ];
   if (action === "--json") {
     const { brandIcon } = await import("./brands");
-    const rows = list.map(({ name, title, state, bytes, size }) => ({ name, title, state, bytes, size, ...(brandIcon(name) ?? { icon: "sf:cloud.fill", tint: name === "az" ? "0078D4" : "FF9900" }) }));
+    const fallback = (name: string) =>
+      name === "carapace" ? { icon: "sf:arrow.triangle.2.circlepath", tint: "8E44AD" } : { icon: "sf:cloud.fill", tint: name === "az" ? "0078D4" : "FF9900" };
+    const rows = list.map(({ name, title, state, bytes, size }) => ({ name, title, state, bytes, size, ...(brandIcon(name) ?? fallback(name)) }));
     console.log(JSON.stringify(rows));
-    return 0;
-  }
-  if (list.length === 0) {
-    console.log("This version has no extras. All completions are included.");
     return 0;
   }
   for (const extra of list) {
     console.log(`${extra.name.padEnd(8)} ${extra.state.padEnd(10)} ${megabytes(extra.bytes)} download, ${megabytes(extra.size)} on disk  ${extra.title}`);
   }
   return 0;
+}
+
+function carapaceCheck(): [boolean | null, string, string] {
+  const { installed, version, commands } = carapaceStatus();
+  return [installed, "carapace", installed ? `${version}, ${commands} tools, in ${carapaceHome()}` : "optional, figxit extras add carapace"];
+}
+
+async function carapaceCommand(args: string[]): Promise<number> {
+  if (args[0] !== "update") {
+    console.error("Usage: figxit carapace update");
+    return 1;
+  }
+  if (!carapaceStatus().installed) {
+    console.error("figxit: carapace is not downloaded. Run figxit extras add carapace");
+    return 1;
+  }
+  const error = await updateCarapace(Date.now(), true);
+  if (error) console.error(`figxit: ${error}`);
+  return error ? 1 : 0;
 }
 
 const [command, argument] = process.argv.slice(2);
@@ -334,6 +367,8 @@ switch (command) {
     process.exit(await stop());
   case "extras":
     process.exit(await extrasCommand(process.argv.slice(3)));
+  case "carapace":
+    process.exit(await carapaceCommand(process.argv.slice(3)));
   case "doctor":
     process.exit(await doctor(process.argv.includes("--app"), process.argv.includes("--json")));
   case "--version":

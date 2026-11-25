@@ -1231,19 +1231,20 @@ describe("user specs in ~/.config/figxit/specs", () => {
     });
   });
 
-  test("a generated carapace spec sits between the user's spec and the bundled one", async () => {
+  test("a generated carapace tree merges into the bundled spec, below the user's spec", async () => {
     await withUserSpecs(async (dir) => {
       const generated = mkdtempSync(join(tmpdir(), "figxit-carapace-specs-"));
       const saved = process.env.FIGXIT_CARAPACE_SPECS;
       process.env.FIGXIT_CARAPACE_SPECS = generated;
+      const first = async (name: string) => (await subcommands(name)).map((n: unknown) => ([] as unknown[]).concat(n)[0]);
       try {
         registerSpec("tool-g", { name: "tool-g", subcommands: [{ name: "bundled" }] });
-        writeFileSync(join(generated, "tool-g.js"), spec('{ name: "tool-g", subcommands: [{ name: "carapace" }] }'));
-        expect(await subcommands("tool-g")).toEqual(["carapace"]);
+        writeFileSync(join(generated, "tool-g.json"), JSON.stringify({ name: ["tool-g"], subcommands: [{ name: ["fresh"] }] }));
+        expect(await first("tool-g")).toEqual(["bundled", "fresh"]);
         writeFileSync(join(dir, "tool-g.js"), spec('{ name: "tool-g", subcommands: [{ name: "mine" }] }'));
-        expect(await subcommands("tool-g")).toEqual(["mine"]);
+        expect(await first("tool-g")).toEqual(["mine"]);
         rmSync(join(dir, "tool-g.js"));
-        expect(await subcommands("tool-g")).toEqual(["carapace"]);
+        expect(await first("tool-g")).toEqual(["bundled", "fresh"]);
       } finally {
         process.env.FIGXIT_CARAPACE_SPECS = saved;
         rmSync(generated, { recursive: true });
